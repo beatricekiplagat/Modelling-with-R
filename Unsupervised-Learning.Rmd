@@ -1,0 +1,449 @@
+---
+title: "Unsupervised Learning"
+author: "Beaty"
+date: "9/01/2021"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Customer Segmentation
+
+Data Understanding
+
+1. Define the question:
+
+- Perform clustering stating insights drawn from your analysis and visualizations.
+- Upon implementation, provide comparisons between the approaches learned this week i.e. K-Means clustering vs Hierarchical clustering highlighting the strengths and limitations of each approach in the context of your analysi
+
+2. Metric for success:
+
+- Create models using K-means Modeling & Hierarchical clustering and compare them.
+- Highlighting the strengths and limitations of each approach
+
+
+3. Understanding the context:
+
+Kira Plastinina is a Russian brand that is sold through a defunct chain of retail stores in Russia, Ukraine, Kazakhstan, Belarus, China, Philippines, and Armenia. The brand’s Sales and Marketing team would like to understand their customer’s behavior from data that they have collected over the past year. More specifically, they would like to learn the characteristics of customer groups.
+My findings should help inform the team in formulating the marketing and sales strategies of the brand. 
+
+4. Experimental design:
+
+Steps to be undertaken during this study include:
+- Problem Definition
+- Loading the data & needed packages.
+- Exploring the dataset.
+- Cleaning the data.
+- Feature engineering.
+- Exploratory Data Analysis.
+- Clustering(K-Means & Hierarchical)
+- Challenging the solution
+
+5. Data appropriateness:
+
+This will be well checked & described in the data cleaning.
+
+Loading required packages, since they were already instaled
+```{r}
+#Loading the R packages in my notebook.
+library("data.table")
+library("ggplot2")
+library(dplyr)
+library("corrplot")
+```
+
+Loading the data
+```{r}
+#Loading the datas
+df = read.csv(url("http://bit.ly/EcommerceCustomersDataset"))
+
+head(df)
+```
+
+Getting the dimensions of our dataset
+```{r}
+dim(df)
+```
+Our dataset has 18 columns and 12,330 entries.
+
+
+Getting the summary statistics of our data
+```{r}
+#Printing out the basic statistics in ou dataset.
+summary(df)
+```
+The above contains the rages of our columns, the quartile values(IQR can be calculated from those), aswell as the median and mean for each row. 
+
+We can also see that the Admistrative, AdministrativeDuration, Informational, InformationalDuration, ProductRelated Duration, BounceRates & ExitRates columns have nulls in their columns.
+
+
+Data Cleaning
+
+From the codes above, we saw quite some null values. We will now deal with them
+First, we will check to see how many nulls are there in the different columns
+
+```{r}
+#Checking for missing values
+colSums(is.na(df))
+```
+
+We will then use the MICE package to impute the missing values
+
+Installing the MICE package
+```{r}
+#Installing the package
+#install.packages("mice", dependencies = TRUE)
+```
+```{r}
+# Loading the library
+library("mice")
+```
+
+```{r}
+#Using the MICE package to fill in the missing values
+mice_mod <- mice(df[, c("Administrative","Administrative_Duration","Informational","Informational_Duration","ProductRelated","ProductRelated_Duration","BounceRates","ExitRates")],method='rf')
+
+mice_complete <- complete(mice_mod)
+```
+```{r}
+#Transferring the missing values into the main dataset
+df$Administrative <- mice_complete$Administrative
+df$Administrative_Duration <- mice_complete$Administrative_Duration
+df$Informational <- mice_complete$Informational
+df$Informational_Duration <- mice_complete$Informational_Duration
+df$ProductRelated <- mice_complete$ProductRelated
+df$ProductRelated_Duration <- mice_complete$ProductRelated_Duration
+df$BounceRates <- mice_complete$BounceRates
+df$ExitRates <- mice_complete$ExitRates
+```
+
+
+We will now check if all the nulls have been imputed successfully
+```{r}
+#Checking for missing values in our dataset
+colSums(is.na(df))
+```
+There are no nulls anymore
+
+
+Checking for duplicates
+```{r}
+length(which(duplicated(df)))
+
+```
+We will remove the duplicates
+```{r}
+df = unique(df)
+```
+
+
+Checking if the duplicates have been removed
+```{r}
+anyDuplicated(df)
+```
+There are no duplicates anymore in our data
+
+
+Checking for outliers
+```{r}
+#Selecting only the numeric columns in our dataset
+num_cols <- unlist(lapply(df, is.numeric))   
+num_cols
+```
+
+
+```{r}
+#Subsetting the numeric columns
+data_num <- df[ , num_cols] 
+```
+
+
+We will use the melt function to view the outliers in our dataset
+First, we will install the reshape package
+```{r}
+#Installing the package
+#install.packages("reshape",dependencies = TRUE)
+```
+
+Loading the library
+```{r}
+library("reshape")
+```
+  We will melt the data to view the outliers
+```{r}
+#Melting the data
+meltData <- melt(data_num)
+```
+
+```{r}
+#Plotting the boxplots to view the outliers
+p <- ggplot(meltData, aes(factor(variable), value)) 
+p + geom_boxplot() + facet_wrap(~variable, scale="free")
+```
+The columns with outliers are Administrative Duration, Informational, Informational Duration, ProductRelated, Product Related Duration & Page Values columns. We will not be dropping the outliers for now.
+
+
+Exploratory Data Analysis
+
+a) Univariate
+Measures of dispersion & spread
+```{r}
+summary(df)
+```
+From the above, we can see the measures of dispersion for the columns. It also shows the ranges for each, as well as the IQR.
+
+```{r}
+# A bar plot showing the distribution of visitors by Month
+barplot(table(df$Month),  col =  c("red" , "green", "blue"), ylab = "No. of visitors", main = "Distribution of visitors by Month")
+```
+From the plot, we can see that May had the highest number of visitors on the site, followed by November then March & December. February had the least number of visitors.
+
+```{r}
+# A bar plot showing the distribution of visitors by the operating system
+barplot(table(df$OperatingSystems),  col =  c("magenta" , "purple", "cyan"), ylab = "No. of visitors", main = "Distribution of visitors by OS")
+```
+Most of the users used the Operating system denoted by 2.
+
+```{r}
+# A bar plot showing the distribution of visitors by the region
+barplot(table(df$Region),  col =  c("pink" , "purple", "yellow"), ylab = "No. of visitors", main = "Distribution of visitors by Region")
+```
+Most of the visitors were from the region denoted by 1, then followed by region 3, then region 4. Region 5 had the least number of visitors.
+
+
+ 
+```{r}
+#Plotting the results 
+#z <- ggplot(month, aes(x = `Month`, y = n, group = 1))
+
+#z + geom_line(aes(fill = `Month`))
+```
+
+
+November had the highest amount of revenue on the site, which may be attributed to Black Friday & Cyber Monday period sales. It is followed by May, though there is quite a huge difference in revenue between the 2 months. December comes a close third, which may be explained by people's spending habits during the Christmas season.
+
+
+
+b) Bivariate
+
+```{r}
+#Plotting the distribution of clients who brought in revenues.
+ggplot(df, aes(Revenue)) + 
+  geom_bar(fill = "green")
+```
+ We can see that a huge number of clients didn't bring in revenue to the site. 
+ 
+```{r}
+#Grouping the month with the total number of persons who had revenue
+month <- df %>% 
+  group_by(Month) %>%
+  summarise(n=sum(Revenue, na.rm=TRUE)) %>%
+  arrange(desc(n))%>%
+  head(10)
+```
+ 
+
+
+```{r}
+#Grouping the visitor type by the revenues
+visitor <- df %>% 
+  group_by(VisitorType) %>%
+  summarise(n=sum(Revenue, na.rm=TRUE)) %>%
+  arrange(desc(n))%>%
+  head(10)
+```
+
+
+```{r}
+#Plotting the results
+a <- ggplot(visitor, aes(x = `VisitorType`, y = n))
+
+a + geom_col(aes(fill = `VisitorType`))
+```
+From the plots, we can see that it is more likely for a returning visitor to purchase as compared to a ew one or other.
+
+```{r}
+#Grouping the mean number of product related duration by whether one brought in revenue or not.
+product_related <- df %>% 
+  group_by(Revenue) %>%
+  summarise(n=mean(ProductRelated_Duration, na.rm=TRUE)) %>%
+  arrange(desc(n))%>%
+  head(10)
+```
+
+
+```{r}
+#Plotting the results
+c <- ggplot(product_related, aes(x = `Revenue`, y = n))
+
+c + geom_col(aes(fill = `Revenue`))+
+  scale_fill_manual(values = c('magenta', 'yellow'))
+```
+We can see that the longer one spent on the product page, the more likely they are to bring in revenue.
+
+```{r}
+#Grouping the mean bounce rate by the earning of revenue from an individual
+bounce_rate <- df %>% 
+  group_by(Revenue) %>%
+  summarise(n=mean(BounceRates, na.rm=TRUE)) %>%
+  arrange(desc(n))%>%
+  head(10)
+```
+
+
+```{r}
+#Plotting
+c <- ggplot(bounce_rate, aes(x = `Revenue`, y = n))
+
+c + geom_col(aes(fill = `Revenue`)) +
+  scale_fill_manual(values = c('purple', 'cyan'))
+```
+
+People who do not bring in revenue have a higher mean bounce rate as compared to those that brought in revenue.
+
+```{r}
+#Grouping the weekends by the number of persons who brought in Revenue
+weekend <- df %>% 
+  group_by(Weekend) %>%
+  summarise(n=sum(Revenue, na.rm=TRUE)) 
+```
+
+
+```{r}
+#Viewing the results.
+c <- ggplot(weekend, aes(x = `Weekend`, y = n))
+
+c + geom_col(aes(fill = `Weekend`)) +
+  scale_fill_manual(values = c('red', 'orange'))
+```
+Weekdays have more revenues as compared to the weekends. However, this may be due to the fact that there are more weekdays than weekends.
+
+Correlation
+```{r}
+#Calculating the correlation between columns
+
+correlations = cor(data_num)
+
+# Creating a correlogram to plot our correlation for better presentation
+corrplot(correlations, method="shade", tl.col="black", tl.srt=45)
+```
+We can see high positive correlations between different types of pages and the duration spent on each e.g. Administrative & Administrative duration. 
+There is a high positive correlation between the bounce rates and the exit rates. Thus 
+
+There are low positive correlations between the different types of pages e.g. Administrative & Informational. Thus 
+
+There is a low negative correlation between the different types of pages and the bounce rates & exit rates. Thus as one increases, the other decreases. 
+
+
+c) Multivariate
+```{r}
+#Factoring categorical variables in our dataset.
+df$VisitorType <- as.integer(as.factor(df$VisitorType))
+df$Month <- as.integer(as.factor(df$Month))
+df$Weekend <- as.integer(as.factor(df$Weekend))
+```
+
+
+```{r}
+#Using the principal component analysis to check for component variance.
+df.pca <- prcomp(df[,c(1:17)], center = TRUE, scale. = TRUE)
+summary(df.pca)
+```
+From the analysis, we can see that 12 components account for close to 90% variance in the data at 89.8%. 5 components in our dataset have a 52% explanation of variance. So we could actually use a few variable in our analysis and achive the desired results.
+
+
+Clustering
+
+1. K-Means
+```{r}
+#Confirming that there are no nulls
+sum(is.na(df))
+```
+
+
+```{r}
+#Separating the response variables and the class variable.
+df.new<- df[, c(1:17)]
+df.class<- df[, "Revenue"]
+head(df.new)
+```
+
+```{r}
+#Normalizing our continuous variables.
+normalize <- function(x){
+  return ((x-min(x)) / (max(x)-min(x)))
+}
+df.new$Administrative_Duration<- normalize(df.new$Administrative_Duration)
+df.new$ProductRelated<- normalize(df.new$ProductRelated)
+df.new$ProductRelated_Duration<- normalize(df.new$ProductRelated_Duration)
+df.new$BounceRates<- normalize(df.new$BounceRates)
+df.new$ExitRates<- normalize(df.new$ExitRates)
+head(df.new)
+```
+
+```{r}
+
+```
+
+
+```{r}
+#Defining the number of clusters in our dataset
+result<- kmeans(df.new,2) 
+
+#Previewing the no. of records in each cluster
+result$size 
+```
+
+```{r}
+#Checking how our labels have been placed.
+table(result$cluster, df.class)
+```
+
+We can see that first cluster correctly classified 10,229 values and classified 1835 values incorrectly.
+The second cluster classified 73 values correctly and classified 193 values incorrectly.
+
+
+2. Hierarchical Clustering
+```{r}
+#Scaling the data
+df.h <- scale(df)
+head(df.h)
+```
+
+```{r}
+#Using the dist
+d = dist(df.h, method = "euclidean")
+```
+
+
+```{r}
+#Using the ward method in our hierarchical clustering
+res.hc <- hclust(d, method = "ward.D2" )
+```
+
+```{r}
+#Plotting the dendogram of our hierarchical clustering
+plot(res.hc, cex = 0.6, hang = -1)
+```
+I am unable to draw insights from thedendogram
+
+
+```{r}
+#Using the single'smethod to get our dendogram
+res.sc <- hclust(d, method = "single" )
+```
+
+
+```{r}
+#Plotting the results
+plot(res.sc, cex = 0.6, hang = -1)
+```
+
+Still not able to draw insights from the dendogram
+
+Hierachical Clustering Method did not perform as well, which might have been caused by the high number of columns. We could have reduced them using the Principal Component Analysis.
